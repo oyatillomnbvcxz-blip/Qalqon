@@ -1,0 +1,66 @@
+name: Qalqon.uz Automated Native Builder
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Extract and Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Kodlarni serverga yuklash
+        uses: actions/checkout@v4
+
+      - name: 2. ZIP arxivni ochish va tozalash
+        run: |
+          echo "📦 ZIP arxiv ochilmoqda..."
+          unzip -q project-bolt-sb1-8cb6uiz3.zip -d .
+          if [ -d "project" ]; then
+            echo "Fayllar asosiy oynaga ko'chirilmoqda..."
+            mv project/* . 2>/dev/null || true
+            mv project/.* . 2>/dev/null || true
+          fi
+          rm -rf android .expo-env .expo
+
+      - name: 3. Node.js (v20) o'rnatish
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 4. Java JDK 17 o'rnatish
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 5. Kutubxonalarni toza holatda o'rnatish
+        run: |
+          npm install --legacy-peer-deps
+
+      - name: 6. Android mahalliy papkalarini qayta yaratish
+        env:
+          NON_INTERACTIVE: 1
+          CI: 1
+        run: |
+          npx expo prebuild --platform android --clean
+
+      - name: 7. Gradle huquqlarini sozlash
+        run: chmod +x android/gradlew
+
+      - name: 8. APK faylini yig'ish (Xotira limiti kengaytirilgan rejim)
+        # Metaspace va Xmx xotira hajmini maxsus buyruqlar bilan ko'paytiramiz
+        env:
+          GRADLE_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError"
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon --parallel --build-cache
+
+      - name: 9. Tayyor APK faylini saqlash
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qalqon-Antivirus-v1.0.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 7
